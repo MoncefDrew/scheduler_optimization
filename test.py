@@ -13,16 +13,21 @@ class ResourceScheduler:
         self.num_jobs = len(self.matrix)
         self.num_resources = len(self.matrix[0])
 
-    def get_execution_order(self):
-        column_usage = []
-        for col in range(self.num_resources):
-            usage = sum(self.matrix[row][col] for row in range(self.num_jobs))
-            column_usage.append((col, usage))
-        column_usage.sort(key=lambda x: (-x[1], x[0]))
-        return [col for col, _ in column_usage]
+    def get_execution_order(self, custom_order=None):
+        if custom_order is not None:
+            # Use the custom order provided by user
+            return custom_order
+        else:
+            # Default behavior: sort by usage
+            column_usage = []
+            for col in range(self.num_resources):
+                usage = sum(self.matrix[row][col] for row in range(self.num_jobs))
+                column_usage.append((col, usage))
+            column_usage.sort(key=lambda x: (-x[1], x[0]))
+            return [col for col, _ in column_usage]
 
-    def compute_schedule(self, available_resources):
-        execution_order = self.get_execution_order()
+    def compute_schedule(self, available_resources, custom_order=None):
+        execution_order = self.get_execution_order(custom_order)
         job_finish_time = [0] * self.num_jobs
         schedule = []  # (resource, job, start, duration)
 
@@ -49,7 +54,7 @@ class ResourceScheduler:
                 job_finish_time[j] += duration
 
         makespan = max(job_finish_time)
-        return schedule, makespan
+        return schedule, makespan, execution_order
 
     def print_gantt_by_resource(self, schedule):
         # Group tasks by resource
@@ -137,9 +142,38 @@ class ResourceScheduler:
 # ===============================
 if __name__ == "__main__":
     scheduler = ResourceScheduler()
+
+    # Get availability vector
     user_input = input("Enter availability vector (R1 R2 R3): ")
     available_resources = list(map(int, user_input.split()))
 
-    schedule, makespan = scheduler.compute_schedule(available_resources)
-    print("Makespan:", makespan)
+    # Ask for execution order
+    order_input = input("Enter execution order (e.g., '3 2 1' or '2 3 1', or press Enter for automatic): ").strip()
+
+    if order_input == "":
+        custom_order = None
+        print("Using automatic ordering (by usage)...")
+    else:
+        try:
+            # Convert user input (1-indexed) to 0-indexed
+            custom_order = [int(x) - 1 for x in order_input.split()]
+
+            # Validate the order
+            if len(custom_order) != scheduler.num_resources:
+                print(f"Error: You must specify exactly {scheduler.num_resources} resources.")
+                custom_order = None
+            elif set(custom_order) != set(range(scheduler.num_resources)):
+                print("Error: Invalid resource numbers or duplicates. Using automatic ordering...")
+                custom_order = None
+            else:
+                print(f"Using custom order: {' -> '.join([f'R{r+1}' for r in custom_order])}")
+        except ValueError:
+            print("Invalid input. Using automatic ordering...")
+            custom_order = None
+
+    schedule, makespan, execution_order = scheduler.compute_schedule(available_resources, custom_order)
+
+    print(f"\nExecution Order: {' -> '.join([f'R{r+1}' for r in execution_order])}")
+    print(f"Makespan: {makespan}")
+
     scheduler.print_gantt_by_resource(schedule)
