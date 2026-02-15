@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from itertools import permutations
 
 class ResourceScheduler:
     def __init__(self):
@@ -13,30 +14,116 @@ class ResourceScheduler:
         self.num_jobs = len(self.matrix)
         self.num_resources = len(self.matrix[0])
 
-    def get_execution_order(self, custom_order=None):
-        if custom_order is not None:
-            # Use the custom order provided by user
-            return custom_order
-        else:
-            # Default behavior: sort by usage
-            column_usage = []
-            for col in range(self.num_resources):
-                usage = sum(self.matrix[row][col] for row in range(self.num_jobs))
-                column_usage.append((col, usage))
-            column_usage.sort(key=lambda x: (-x[1], x[0]))
-            return [col for col, _ in column_usage]
+    def get_execution_order(self):
+        # Automatic ordering: sort by (sum of tokens consumed × execution time)
+        column_priority = []
+        for col in range(self.num_resources):
+            # Sum of tokens consumed by all jobs for this resource
+            token_sum = sum(self.matrix[row][col] for row in range(self.num_jobs))
+            # Multiply by execution time unit
+            priority = token_sum * self.resource_times[col]
+            column_priority.append((col, priority, token_sum))
 
-    def compute_schedule(self, available_resources, custom_order=None):
-        execution_order = self.get_execution_order(custom_order)
+        # Sort by priority (descending), then by column index (ascending) for ties
+        column_priority.sort(key=lambda x: (-x[1], x[0]))
+        return [col for col, _, _ in column_priority]
+
+    def find_optimal_job_order(self, resource_col, jobs_with_data):
+        """
+        Find the optimal order of jobs within a resource to minimize makespan.
+
+        Args:
+            resource_col: The resource column index
+            jobs_with_data: List of tuples (job_index, computing_time, release_time)
+
+        Returns:
+            Best job order and its makespan
+        """
+        if len(jobs_with_data) <= 1:
+            return [j[0] for j in jobs_with_data], 0 if len(jobs_with_data) == 0 else jobs_with_data[0][1] + jobs_with_data[0][2]
+
+        # Calculate number of permutations
+        num_jobs = len(jobs_with_data)
+        num_permutations = 1
+        for i in range(1, num_jobs + 1):
+            num_permutations *= i
+
+        print(f"\n  Analyzing R{resource_col+1}: {num_jobs} jobs → {num_permutations} possible orderings")
+        print(f"  {'─' * 70}")
+
+        # Display job data (Pi and rj are same for all permutations)
+        print(f"  Job data for R{resource_col+1}:")
+        for job_idx, computing_time, release_time in jobs_with_data:
+            print(f"    J{job_idx+1}: Pi={computing_time}, rj={release_time}")
+        print()
+
+        best_order = None
+        best_makespan = float('inf')
+        best_details = None
+        all_results = []
+
+        # Try all permutations
+        for perm_idx, perm in enumerate(permutations(jobs_with_data), 1):
+            # Calculate finish time for this permutation
+            current_time = 0
+            finish_times = []
+            schedule_details = []
+
+            for job_idx, computing_time, release_time in perm:
+                # Job can start at max(current_time, release_time)
+                start_time = max(current_time, release_time)
+                finish_time = start_time + computing_time
+                finish_times.append((job_idx, start_time, finish_time))
+                schedule_details.append(f"J{job_idx+1}(start={start_time}, Cj={finish_time})")
+                current_time = finish_time
+
+            # Makespan is the finish time of the last job
+            makespan = finish_times[-1][2]
+
+            order_str = ' → '.join([f'J{j[0]+1}' for j in perm])
+            result_str = f"  #{perm_idx}: {order_str:20} | {' | '.join(schedule_details)} | Makespan: {makespan}"
+            all_results.append((makespan, result_str))
+
+            if makespan < best_makespan:
+                best_makespan = makespan
+                best_order = [j[0] for j in perm]
+                best_details = finish_times
+
+        # Display all results
+        for makespan, result_str in all_results:
+            print(result_str)
+
+        print(f"\n  ✓ BEST ORDER: {' → '.join([f'J{j+1}' for j in best_order])} with Makespan = {best_makespan}")
+        print(f"  {'─' * 70}")
+
+        return best_order, best_makespan, best_details
+
+    def compute_schedule(self, available_resources):
+        execution_order = self.get_execution_order()
+
+        print("\nUsing automatic ordering (by tokens × execution time)...")
+        print("\nPriority calculation:")
+        for col in range(self.num_resources):
+            token_sum = sum(self.matrix[row][col] for row in range(self.num_jobs))
+            priority = token_sum * self.resource_times[col]
+            print(f"  R{col+1}: {token_sum} tokens × {self.resource_times[col]} time = {priority}")
+
+        print(f"\nResource Execution Order: {' → '.join([f'R{col+1}' for col in execution_order])}")
+
+        # Track when each job finishes (initially all at time 0)
         job_finish_time = [0] * self.num_jobs
         schedule = []  # (resource, job, start, duration)
+
+        print("\n" + "="*60)
+        print("OPTIMAL JOB ORDERING WITHIN EACH RESOURCE")
+        print("="*60)
 
         for col in execution_order:
             available_tokens = available_resources[col]
             base_time = self.resource_times[col]
 
-            jobs = [j for j in range(self.num_jobs)
-                    if self.matrix[j][col] > 0]
+            # Get jobs that use this resource
+            jobs = [j for j in range(self.num_jobs) if self.matrix[j][col] > 0]
 
             required_tokens = len(jobs)
             if required_tokens > available_tokens:
@@ -45,13 +132,25 @@ class ResourceScheduler:
                     f"Required {required_tokens}, Available {available_tokens}"
                 )
 
-            # Parallel execution
+            if len(jobs) == 0:
+                continue
+
+            # Prepare job data: (job_index, computing_time, release_time)
+            jobs_with_data = []
             for j in jobs:
                 utilization = self.matrix[j][col]
-                duration = utilization * base_time
-                start_time = job_finish_time[j]
-                schedule.append((col, j, start_time, duration))
-                job_finish_time[j] += duration
+                computing_time = utilization * base_time  # Pi
+                release_time = job_finish_time[j]  # rj (when job is ready)
+                jobs_with_data.append((j, computing_time, release_time))
+
+            # Find optimal job order for this resource
+            optimal_order, resource_makespan, job_details = self.find_optimal_job_order(col, jobs_with_data)
+
+            # Update schedule with optimal ordering
+            for job_idx, start_time, finish_time in job_details:
+                duration = finish_time - start_time
+                schedule.append((col, job_idx, start_time, duration))
+                job_finish_time[job_idx] = finish_time
 
         makespan = max(job_finish_time)
         return schedule, makespan, execution_order
@@ -147,33 +246,10 @@ if __name__ == "__main__":
     user_input = input("Enter availability vector (R1 R2 R3): ")
     available_resources = list(map(int, user_input.split()))
 
-    # Ask for execution order
-    order_input = input("Enter execution order (e.g., '3 2 1' or '2 3 1', or press Enter for automatic): ").strip()
+    schedule, makespan, execution_order = scheduler.compute_schedule(available_resources)
 
-    if order_input == "":
-        custom_order = None
-        print("Using automatic ordering (by usage)...")
-    else:
-        try:
-            # Convert user input (1-indexed) to 0-indexed
-            custom_order = [int(x) - 1 for x in order_input.split()]
-
-            # Validate the order
-            if len(custom_order) != scheduler.num_resources:
-                print(f"Error: You must specify exactly {scheduler.num_resources} resources.")
-                custom_order = None
-            elif set(custom_order) != set(range(scheduler.num_resources)):
-                print("Error: Invalid resource numbers or duplicates. Using automatic ordering...")
-                custom_order = None
-            else:
-                print(f"Using custom order: {' -> '.join([f'R{r+1}' for r in custom_order])}")
-        except ValueError:
-            print("Invalid input. Using automatic ordering...")
-            custom_order = None
-
-    schedule, makespan, execution_order = scheduler.compute_schedule(available_resources, custom_order)
-
-    print(f"\nExecution Order: {' -> '.join([f'R{r+1}' for r in execution_order])}")
-    print(f"Makespan: {makespan}")
+    print("\n" + "="*60)
+    print(f"FINAL RESULT: Makespan = {makespan}")
+    print("="*60)
 
     scheduler.print_gantt_by_resource(schedule)
