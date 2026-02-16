@@ -86,18 +86,20 @@ class ResourceScheduler:
 
         return conflicts
 
-    def phase2_resolve_conflict_max_workload(self, resource_col, jobs, job_finish_times):
+    def phase2_resolve_conflict_max_workload(self, resource_col, jobs, job_finish_times, available_units):
         """
         PHASE 2 - Step 5-6: Resolve conflict using max workload processing
         Find the least makespan and decide which job starts first
+        Supports parallel execution when multiple units are available
         """
         base_time = self.resource_times[resource_col]
 
         print(f"\n  {'='*68}")
         print(f"  RESOLVING CONFLICT IN R{resource_col+1}")
         print(f"  {'='*68}")
-        print(f"  Question: Which job starts first in R{resource_col+1}?")
-        print(f"  Jobs competing: {[f'J{j+1}' for j in jobs]}")
+        print(f"  Question: Which job order is optimal for R{resource_col+1}?")
+        print(f"  Jobs: {[f'J{j+1}' for j in jobs]}")
+        print(f"  Available units: {available_units} (parallel execution enabled)")
 
         # Prepare job data
         jobs_with_data = []
@@ -116,7 +118,7 @@ class ResourceScheduler:
         for i in range(1, len(jobs) + 1):
             num_permutations *= i
 
-        print(f"\n  Testing all {num_permutations} possible orderings:")
+        print(f"\n  Testing all {num_permutations} possible orderings with {available_units} parallel unit(s):")
         print(f"  {'-'*68}")
 
         best_order = None
@@ -125,18 +127,25 @@ class ResourceScheduler:
 
         # Try all permutations
         for perm_idx, perm in enumerate(permutations(jobs_with_data), 1):
-            current_time = 0
+            # Simulate parallel execution with available units
+            unit_free_times = [0] * available_units
             finish_times = []
             schedule_details = []
 
             for job_idx, computing_time, release_time in perm:
-                start_time = max(current_time, release_time)
-                finish_time = start_time + computing_time
-                finish_times.append((job_idx, start_time, finish_time))
-                schedule_details.append(f"J{job_idx+1}(Cj={finish_time})")
-                current_time = finish_time
+                # Find the earliest available unit
+                earliest_unit = min(range(available_units), key=lambda u: unit_free_times[u])
+                earliest_free_time = unit_free_times[earliest_unit]
 
-            makespan = finish_times[-1][2]
+                # Job starts when both: unit is free AND job is released
+                start_time = max(earliest_free_time, release_time)
+                finish_time = start_time + computing_time
+
+                finish_times.append((job_idx, start_time, finish_time))
+                schedule_details.append(f"J{job_idx+1}(s={start_time},C={finish_time})")
+                unit_free_times[earliest_unit] = finish_time
+
+            makespan = max(ft[2] for ft in finish_times)
             order_str = ' → '.join([f'J{j[0]+1}' for j in perm])
 
             marker = ""
@@ -146,7 +155,7 @@ class ResourceScheduler:
                 best_details = finish_times
                 marker = " ⭐"
 
-            print(f"  #{perm_idx}: {order_str:20} | {' | '.join(schedule_details):40} | Makespan: {makespan}{marker}")
+            print(f"  #{perm_idx}: {order_str:20} | {' | '.join(schedule_details):45} | Makespan: {makespan}{marker}")
 
         print(f"  {'-'*68}")
         print(f"\n  [Step 6] DECISION:")
@@ -156,12 +165,15 @@ class ResourceScheduler:
         print(f"  {'='*68}")
 
         return best_order, best_details
+        print(f"  {'='*68}")
+
+        return best_order, best_details
 
     def compute_schedule_single_vector(self, available_vector, show_details=True):
         """
         Compute schedule for a single vector without printing all details.
         Used for comparing different vectors.
-        Always resolves conflicts using max workload processing.
+        Always resolves conflicts using max workload processing with parallel execution.
         """
         # Get best order
         column_priority = []
@@ -179,7 +191,7 @@ class ResourceScheduler:
             if len(jobs_needing) > available_vector[col]:
                 conflicts[col] = jobs_needing
 
-        # Solve schedule - always resolve conflicts
+        # Solve schedule - always resolve conflicts with parallel execution
         job_finish_times = [0] * self.num_jobs
         schedule = []
 
@@ -189,15 +201,17 @@ class ResourceScheduler:
             if len(jobs) == 0:
                 continue
 
-            if col in conflicts:
-                # Resolve conflict using max workload processing
-                optimal_order, job_details = self.resolve_conflict_silent(col, jobs, job_finish_times)
+            available_units = available_vector[col]
+
+            if col in conflicts or len(jobs) > 1:
+                # Use optimal ordering with parallel execution
+                optimal_order, job_details = self.resolve_conflict_silent(col, jobs, job_finish_times, available_units)
                 for job_idx, start_time, finish_time in job_details:
                     duration = finish_time - start_time
                     schedule.append((col, job_idx, start_time, duration))
                     job_finish_times[job_idx] = finish_time
             else:
-                # Parallel execution
+                # Single job, simple execution
                 for j in jobs:
                     utilization = self.matrix[j][col]
                     duration = utilization * self.resource_times[col]
@@ -208,9 +222,11 @@ class ResourceScheduler:
         makespan = max(job_finish_times) if job_finish_times else 0
         return schedule, makespan
 
-    def resolve_conflict_silent(self, resource_col, jobs, job_finish_times):
+    def resolve_conflict_silent(self, resource_col, jobs, job_finish_times, available_units):
         """
-        Resolve conflict without printing (for vector comparison)
+        Resolve conflict with parallel execution support.
+        When available_units < len(jobs), we have a conflict and need to find optimal ordering.
+        Jobs execute in parallel on available units, no sleeping/gaps allowed.
         """
         base_time = self.resource_times[resource_col]
 
@@ -226,16 +242,25 @@ class ResourceScheduler:
         best_details = None
 
         for perm in permutations(jobs_with_data):
-            current_time = 0
+            # Simulate parallel execution with available units
+            # Track when each unit becomes free
+            unit_free_times = [0] * available_units
             finish_times = []
 
             for job_idx, computing_time, release_time in perm:
-                start_time = max(current_time, release_time)
-                finish_time = start_time + computing_time
-                finish_times.append((job_idx, start_time, finish_time))
-                current_time = finish_time
+                # Find the earliest available unit
+                earliest_unit = min(range(available_units), key=lambda u: unit_free_times[u])
+                earliest_free_time = unit_free_times[earliest_unit]
 
-            makespan = finish_times[-1][2]
+                # Job starts when both: unit is free AND job is released
+                start_time = max(earliest_free_time, release_time)
+                finish_time = start_time + computing_time
+
+                finish_times.append((job_idx, start_time, finish_time))
+                unit_free_times[earliest_unit] = finish_time
+
+            # Makespan is when the last job finishes
+            makespan = max(ft[2] for ft in finish_times)
 
             if makespan < best_makespan:
                 best_makespan = makespan
@@ -401,9 +426,12 @@ class ResourceScheduler:
             if len(jobs) == 0:
                 continue
 
-            if col in conflicts:
-                # Conflict exists: resolve it using max workload
-                optimal_order, job_details = self.phase2_resolve_conflict_max_workload(col, jobs, job_finish_times)
+
+            available_units = available_vector[col]
+
+            if col in conflicts or len(jobs) > 1:
+                # Use optimal ordering with parallel execution
+                optimal_order, job_details = self.phase2_resolve_conflict_max_workload(col, jobs, job_finish_times, available_units)
 
                 # Update schedule
                 for job_idx, start_time, finish_time in job_details:
@@ -411,8 +439,8 @@ class ResourceScheduler:
                     schedule.append((col, job_idx, start_time, duration))
                     job_finish_times[job_idx] = finish_time
             else:
-                # No conflict: parallel execution
-                print(f"\n  R{col+1}: No conflict - parallel execution")
+                # Single job: simple execution
+                print(f"\n  R{col+1}: Single job - direct execution")
                 for j in jobs:
                     utilization = self.matrix[j][col]
                     duration = utilization * self.resource_times[col]
