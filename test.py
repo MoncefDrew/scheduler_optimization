@@ -157,9 +157,207 @@ class ResourceScheduler:
 
         return best_order, best_details
 
-    def compute_schedule(self, available_vector):
+    def compute_schedule_single_vector(self, available_vector, show_details=True):
         """
-        Main algorithm: Execute Phase 1 and Phase 2
+        Compute schedule for a single vector without printing all details.
+        Used for comparing different vectors.
+        Always resolves conflicts using max workload processing.
+        """
+        # Get best order
+        column_priority = []
+        for col in range(self.num_resources):
+            token_sum = sum(self.matrix[row][col] for row in range(self.num_jobs))
+            priority = token_sum * self.resource_times[col]
+            column_priority.append((col, priority))
+        column_priority.sort(key=lambda x: (-x[1], x[0]))
+        best_order = [col for col, _ in column_priority]
+
+        # Identify which resources have conflicts
+        conflicts = {}
+        for col in range(self.num_resources):
+            jobs_needing = [j for j in range(self.num_jobs) if self.matrix[j][col] > 0]
+            if len(jobs_needing) > available_vector[col]:
+                conflicts[col] = jobs_needing
+
+        # Solve schedule - always resolve conflicts
+        job_finish_times = [0] * self.num_jobs
+        schedule = []
+
+        for col in best_order:
+            jobs = [j for j in range(self.num_jobs) if self.matrix[j][col] > 0]
+
+            if len(jobs) == 0:
+                continue
+
+            if col in conflicts:
+                # Resolve conflict using max workload processing
+                optimal_order, job_details = self.resolve_conflict_silent(col, jobs, job_finish_times)
+                for job_idx, start_time, finish_time in job_details:
+                    duration = finish_time - start_time
+                    schedule.append((col, job_idx, start_time, duration))
+                    job_finish_times[job_idx] = finish_time
+            else:
+                # Parallel execution
+                for j in jobs:
+                    utilization = self.matrix[j][col]
+                    duration = utilization * self.resource_times[col]
+                    start_time = job_finish_times[j]
+                    schedule.append((col, j, start_time, duration))
+                    job_finish_times[j] = start_time + duration
+
+        makespan = max(job_finish_times) if job_finish_times else 0
+        return schedule, makespan
+
+    def resolve_conflict_silent(self, resource_col, jobs, job_finish_times):
+        """
+        Resolve conflict without printing (for vector comparison)
+        """
+        base_time = self.resource_times[resource_col]
+
+        jobs_with_data = []
+        for j in jobs:
+            utilization = self.matrix[j][resource_col]
+            computing_time = utilization * base_time
+            release_time = job_finish_times[j]
+            jobs_with_data.append((j, computing_time, release_time))
+
+        best_order = None
+        best_makespan = float('inf')
+        best_details = None
+
+        for perm in permutations(jobs_with_data):
+            current_time = 0
+            finish_times = []
+
+            for job_idx, computing_time, release_time in perm:
+                start_time = max(current_time, release_time)
+                finish_time = start_time + computing_time
+                finish_times.append((job_idx, start_time, finish_time))
+                current_time = finish_time
+
+            makespan = finish_times[-1][2]
+
+            if makespan < best_makespan:
+                best_makespan = makespan
+                best_order = [j[0] for j in perm]
+                best_details = finish_times
+
+        return best_order, best_details
+
+    def iterative_vector_reduction(self, initial_vector):
+        """
+        NEW FEATURE: Iteratively reduce vector values one by one.
+        After lowering each column:
+        - Solve conflicts using max workload processing (matrix method)
+        - Save makespan and vector
+        - If makespan goes up: revert and try next column
+        - If makespan goes down or same: keep change and continue
+
+        NOTE: Vector values cannot go below 1 (need at least 1 resource to execute jobs)
+        """
+        print("\n" + "="*70)
+        print("ITERATIVE VECTOR REDUCTION")
+        print("="*70)
+
+        current_vector = initial_vector.copy()
+        schedule, current_makespan = self.compute_schedule_single_vector(current_vector)
+
+        print(f"\nStarting vector: {current_vector}")
+        print(f"Starting makespan: {current_makespan}")
+
+        history = [(current_vector.copy(), current_makespan)]
+
+        print("\n" + "-"*70)
+        print("TRYING TO REDUCE VECTOR...")
+        print("-"*70)
+
+        iteration = 0
+        improved = True
+
+        while improved:
+            improved = False
+
+            for col in range(self.num_resources):
+                # Check if this resource has any jobs that need it
+                jobs_needing = sum(1 for row in range(self.num_jobs) if self.matrix[row][col] > 0)
+
+                if jobs_needing == 0:
+                    # No jobs need this resource, can be 0
+                    min_value = 0
+                else:
+                    # At least one job needs it, must have at least 1 unit
+                    min_value = 1
+
+                if current_vector[col] > min_value:  # Can reduce if above minimum
+                    iteration += 1
+
+                    # Try lowering this column
+                    test_vector = current_vector.copy()
+                    test_vector[col] -= 1
+
+                    print(f"\nIteration {iteration}: Testing R{col+1} reduction: {current_vector} → {test_vector}")
+
+                    # Count conflicts
+                    conflicts_count = 0
+                    for c in range(self.num_resources):
+                        jobs_needing_c = sum(1 for row in range(self.num_jobs) if self.matrix[row][c] > 0)
+                        if jobs_needing_c > test_vector[c]:
+                            conflicts_count += 1
+
+                    if conflicts_count > 0:
+                        print(f"  ⚠️  Conflicts detected: {conflicts_count} resource(s) - resolving using max workload...")
+
+                    # Solve with new vector (always resolves conflicts)
+                    test_schedule, test_makespan = self.compute_schedule_single_vector(test_vector, show_details=False)
+
+                    if test_makespan > current_makespan:
+                        print(f"  📈 Makespan INCREASED: {current_makespan} → {test_makespan}")
+                        print(f"  → Reverting to {current_vector}")
+                    elif test_makespan == current_makespan:
+                        print(f"  ➡️  Makespan SAME: {test_makespan}")
+                        print(f"  → Keeping reduction: {test_vector}")
+                        current_vector = test_vector
+                        current_makespan = test_makespan
+                        history.append((current_vector.copy(), current_makespan))
+                        improved = True
+                        break  # Start over from first column
+                    else:  # test_makespan < current_makespan
+                        print(f"  📉 Makespan DECREASED: {current_makespan} → {test_makespan} ✓")
+                        print(f"  → Accepting reduction: {test_vector}")
+                        current_vector = test_vector
+                        current_makespan = test_makespan
+                        history.append((current_vector.copy(), current_makespan))
+                        improved = True
+                        break  # Start over from first column
+
+        print("\n" + "-"*70)
+        print("REDUCTION COMPLETE")
+        print("-"*70)
+        print(f"\nOptimal vector found: {current_vector}")
+        print(f"Optimal makespan: {current_makespan}")
+
+        # Show minimum possible vector
+        min_possible = []
+        for col in range(self.num_resources):
+            jobs_needing = sum(1 for row in range(self.num_jobs) if self.matrix[row][col] > 0)
+            min_possible.append(1 if jobs_needing > 0 else 0)
+        print(f"Minimum possible vector (with conflicts): {min_possible}")
+
+        print("\n" + "-"*70)
+        print("HISTORY OF IMPROVEMENTS:")
+        print("-"*70)
+        for i, (vec, ms) in enumerate(history):
+            print(f"  Step {i}: Vector {vec} → Makespan = {ms}")
+
+        # Get final schedule with details
+        final_schedule, final_makespan = self.compute_schedule_single_vector(current_vector)
+
+        return current_vector, final_schedule, final_makespan, history
+
+    def compute_schedule_detailed(self, available_vector):
+        """
+        Main algorithm: Execute Phase 1 and Phase 2 WITH DETAILED OUTPUT
+        Always resolves conflicts using max workload processing.
         """
         print("\n" + "="*70)
         print("RESOURCE SCHEDULING ALGORITHM")
@@ -176,24 +374,22 @@ class ResourceScheduler:
         # PHASE 1: Sequencing and Dispatching
         best_order, min_vector = self.phase1_find_best_order_and_minimum_vector()
 
-        # Step 3: Check if vector can be lowered
-        print("\n[Step 3] LOWERING VECTOR VALUES:")
+        # Step 3: Show vector comparison
+        print("\n[Step 3] VECTOR ANALYSIS:")
         print(f"  Current vector:  {available_vector}")
         print(f"  Minimum vector:  {min_vector}")
 
-        can_schedule = all(available_vector[i] >= min_vector[i] for i in range(self.num_resources))
+        has_conflicts = any(available_vector[i] < min_vector[i] for i in range(self.num_resources))
 
-        if not can_schedule:
-            print("\n  ❌ ERROR: Vector is BELOW minimum!")
-            print("  Cannot schedule - insufficient resources.")
-            return None, None
+        if has_conflicts:
+            print("\n  ⚠️  Vector is below minimum - conflicts will be resolved using max workload processing")
         else:
-            print("\n  ✓ Vector is valid (at or above minimum)")
+            print("\n  ✓ Vector is at or above minimum")
 
         # PHASE 2: Conflict resolution
         conflicts = self.phase2_check_conflicts(available_vector)
 
-        # Solve schedule
+        # Solve schedule - always resolve conflicts
         print("\n[Step 5-6] SCHEDULING WITH MAX WORKLOAD PROCESSING:")
 
         job_finish_times = [0] * self.num_jobs
@@ -206,7 +402,7 @@ class ResourceScheduler:
                 continue
 
             if col in conflicts:
-                # Conflict exists: resolve it
+                # Conflict exists: resolve it using max workload
                 optimal_order, job_details = self.phase2_resolve_conflict_max_workload(col, jobs, job_finish_times)
 
                 # Update schedule
@@ -298,15 +494,34 @@ if __name__ == "__main__":
 
     # Get availability vector
     user_input = input("Enter availability vector (R1 R2 R3): ")
-    available_vector = list(map(int, user_input.split()))
+    initial_vector = list(map(int, user_input.split()))
 
-    schedule, makespan = scheduler.compute_schedule(available_vector)
+    # Ask user if they want iterative reduction
+    choice = input("\nDo you want iterative vector reduction? (y/n): ").strip().lower()
 
-    if schedule is not None:
-        print("\n" + "="*70)
-        print("FINAL RESULT")
-        print("="*70)
-        print(f"  MAKESPAN = {makespan}")
-        print("="*70)
+    if choice == 'y':
+        # ITERATIVE VECTOR REDUCTION
+        optimal_vector, schedule, makespan, history = scheduler.iterative_vector_reduction(initial_vector)
 
-        scheduler.print_gantt_by_resource(schedule)
+        if schedule is not None:
+            print("\n" + "="*70)
+            print("FINAL RESULT")
+            print("="*70)
+            print(f"  Starting vector: {initial_vector}")
+            print(f"  Optimal vector:  {optimal_vector}")
+            print(f"  Final MAKESPAN:  {makespan}")
+            print("="*70)
+
+            scheduler.print_gantt_by_resource(schedule)
+    else:
+        # SINGLE RUN WITH DETAILED OUTPUT
+        schedule, makespan = scheduler.compute_schedule_detailed(initial_vector)
+
+        if schedule is not None:
+            print("\n" + "="*70)
+            print("FINAL RESULT")
+            print("="*70)
+            print(f"  MAKESPAN = {makespan}")
+            print("="*70)
+
+            scheduler.print_gantt_by_resource(schedule)
