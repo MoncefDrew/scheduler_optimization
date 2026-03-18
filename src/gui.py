@@ -7,7 +7,12 @@ from typing import Dict, List, Optional
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
-from .io_utils import SchedulerConfig, infer_dimensions_from_matrix, load_config_from_csv
+from .controllers.csv_controller import (
+    load_csv_file,
+    parse_csv_text,
+    save_csv_file,
+)
+from .io_utils import SchedulerConfig, infer_dimensions_from_matrix
 from .scheduler import ResourceScheduler, generate_random_job_paths
 from .visualization import build_gantt_figure, show_gantt_by_resource
 
@@ -178,12 +183,37 @@ class SchedulerGUI(tk.Tk):
         if not path:
             return
         try:
-            config: SchedulerConfig = load_config_from_csv(path)
+            content = load_csv_file(path)
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load CSV:\n{e}")
+            messagebox.showerror("Input error", f"Could not read CSV file:\n{e}")
             return
 
-        self._apply_config(config)
+        editor = tk.Toplevel(self)
+        editor.title("Edit CSV input")
+        editor.geometry("700x500")
+
+        text = tk.Text(editor, wrap="none")
+        text.insert("1.0", content)
+        text.pack(fill=tk.BOTH, expand=True)
+
+        def apply_and_save():
+            csv_text = text.get("1.0", tk.END)
+            try:
+                config: SchedulerConfig = parse_csv_text(csv_text)
+            except Exception as e:
+                messagebox.showerror("Input error", f"Invalid CSV format:\n{e}")
+                return
+            try:
+                save_csv_file(path, csv_text)
+            except Exception as e:
+                messagebox.showerror("Input error", f"Could not save CSV file:\n{e}")
+                return
+            self._apply_config(config)
+            editor.destroy()
+
+        ttk.Button(editor, text="Save and apply", command=apply_and_save).pack(
+            side=tk.BOTTOM, pady=6
+        )
 
     def configure_matrix_dialog(self):
         dialog = tk.Toplevel(self)

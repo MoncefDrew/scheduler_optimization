@@ -10,6 +10,12 @@ from src.gui import run_gui
 if __name__ == "__main__":
     run_gui()
 
+from src.gui import run_gui
+
+
+if __name__ == "__main__":
+    run_gui()
+
 import matplotlib.pyplot as plt
 from itertools import permutations
 import random
