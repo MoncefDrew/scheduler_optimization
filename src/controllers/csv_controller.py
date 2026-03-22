@@ -1,9 +1,11 @@
 from __future__ import annotations
-
 import csv
 from typing import List
-
-from ..io_utils import SchedulerConfig, parse_matrix_from_csv_rows, parse_vector_from_row
+from ..core.io_utils import (
+    SchedulerConfig,
+    parse_matrix_from_csv_rows,
+    parse_vector_from_row,
+)
 
 
 def _split_blocks(rows: List[List[str]]) -> List[List[List[str]]]:
@@ -58,7 +60,6 @@ def parse_csv_text(text: str) -> SchedulerConfig:
     num_resources = len(matrix[0])
     if num_jobs != num_resources:
         raise ValueError(f"Matrix must be square (n×n). Found {num_jobs}×{num_resources}.")
-
     for row in matrix:
         if len(row) != num_resources:
             raise ValueError("All matrix rows must have the same length.")
@@ -70,6 +71,9 @@ def parse_csv_text(text: str) -> SchedulerConfig:
         raise ValueError(
             f"Resource times length must be {num_resources}, got {len(resource_times)}."
         )
+
+    if any(t <= 0 for t in resource_times):
+        raise ValueError("All resource execution times must be > 0.")
 
     if len(availability_vector) != num_resources:
         raise ValueError(
@@ -91,4 +95,3 @@ def load_csv_file(path: str) -> str:
 def save_csv_file(path: str, content: str) -> None:
     with open(path, "w", newline="") as f:
         f.write(content)
-

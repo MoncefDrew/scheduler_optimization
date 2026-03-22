@@ -1,3 +1,9 @@
+from src.views.gui import run_gui
+
+
+if __name__ == "__main__":
+    run_gui()
+
 from src.gui import run_gui
 
 
@@ -179,15 +185,7 @@ class ResourceScheduler:
         Resources are processed in order of workload (already calculated)
         Matrix method is applied within each resource to find optimal job ordering
         """
-        if verbose:
-            print("\n" + "=" * 70)
-            print(f"PHASE 2: SCHEDULING - {scenario_name}")
-            print("=" * 70)
-            print("\nJob routing paths:")
-            for job_idx, path in job_paths.items():
-                path_str = " → ".join([f"R{r + 1}" for r in path])
-                print(f"  J{job_idx + 1}: {path_str}")
-
+        
         # Calculate resource execution order by workload
         resource_order = (
             self.calculate_resource_workload()

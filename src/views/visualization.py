@@ -19,10 +19,6 @@ def build_gantt_figure(
     schedule: List[Tuple[int, int, float, float]],
     title: str = "Gantt Chart - Optimal Schedule",
 ) -> Figure:
-    """
-    Build and return a matplotlib Figure for the given schedule.
-    This is used by the GUI to embed the chart inside a Tkinter tab.
-    """
     if not schedule:
         return Figure()
 
@@ -101,20 +97,28 @@ def build_gantt_figure(
     return fig
 
 
-def show_gantt_by_resource(
-    schedule: List[Tuple[int, int, float, float]],
-    title: str = "Gantt Chart - Optimal Schedule",
-):
-    """
-    Convenience helper to show the Gantt chart in a standalone window
-    (for non-GUI usage). The GUI uses build_gantt_figure instead.
-    """
-    if not schedule:
-        return
 
-    fig = build_gantt_figure(schedule, title)
-    # Use pyplot to show the figure in its own window
-    plt.figure(fig.number)
-    plt.show()
+def build_stats_figure(
+    num_resources: int,
+    resource_busy: Dict[int, float],
+    resource_idle: Dict[int, float],
+    title: str = "Resource Utilization",
+) -> Figure:
+    fig = Figure(figsize=(10, 4))
+    ax = fig.add_subplot(111)
 
+    resources = [f"R{r + 1}" for r in range(num_resources)]
+    busy_times = [resource_busy.get(r, 0.0) for r in range(num_resources)]
+    idle_times = [resource_idle.get(r, 0.0) for r in range(num_resources)]
+
+    ax.bar(resources, busy_times, label="Busy Time", color="#3498db", edgecolor="black")
+    ax.bar(resources, idle_times, bottom=busy_times, label="Idle Time", color="#ecf0f1", edgecolor="black")
+
+    ax.set_ylabel("Time", fontsize=10, fontweight="bold")
+    ax.set_title(title, fontsize=12, fontweight="bold")
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3, linestyle=":", linewidth=0.8)
+
+    fig.tight_layout()
+    return fig
 
