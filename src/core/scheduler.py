@@ -4,9 +4,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 
 class ResourceScheduler:
-    """
-    Core scheduling and optimization logic (Model).
-    """
+
 
     def __init__(self, matrix=None, resource_times=None):
         if matrix is None:

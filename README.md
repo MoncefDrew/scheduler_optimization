@@ -212,12 +212,15 @@ This opens the GUI for configuring data, defining scenarios, running optimizatio
 
 | Path              | Description                                   |
 |-------------------|-----------------------------------------------|
-| `src/scheduler.py`    | Core scheduling and vector optimization logic.  |
-| `src/io_utils.py`     | CSV parsing and basic data helpers.            |
-| `src/visualization.py`| Gantt chart construction and plotting.         |
-| `src/gui.py`          | Tkinter GUI: configuration, scenarios, charts. |
-| `test.py`             | GUI entry point (`run_gui`).                   |
-| `README.md`           | Project documentation.                          |
+| `src/core/scheduler.py` | Core scheduling and vector optimization algorithm. |
+| `src/core/io_utils.py` | CSV parsing and foundational data structures. |
+| `src/controllers/profile_controller.py` | SQLite database operations for persisting profiles. |
+| `src/views/gui.py` | Main Tkinter window wiring everything together. |
+| `src/views/visualization.py` | Gantt chart and utilization plot generators using Matplotlib. |
+| `src/views/components/*.py` | Reusable UI dialogs and components (e.g., matrix_editor, scenario_editor, result_viewer). |
+| `src/views/utils/*.py` | Helper functions for UI interactions and configuration management. |
+| `test.py`         | GUI entry point (`run_gui`).                   |
+| `README.md`       | Project documentation.                          |
 
 ---
 

@@ -1,13 +1,11 @@
-"""
-Shared data model for GUI scenarios.
-"""
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional
 
 
 class Scenario:
-    """Represents a single job-routing scenario with its results."""
+
 
     def __init__(self, name: str, job_paths: Dict[int, List[int]]):
         self.name = name

@@ -1,6 +1,4 @@
-"""
-Stats viewer: computes KPIs and renders the graphical utilisation chart + text summary.
-"""
+
 from __future__ import annotations
 
 import base64
@@ -17,7 +15,7 @@ if TYPE_CHECKING:
 
 
 def render_stats(app: "SchedulerGUI", scenario: "Scenario") -> None:
-    """Populate the stats tab for the given scenario."""
+
     if not scenario.schedule or scenario.optimal_makespan is None:
         app.stats_text.configure(state="normal")
         app.stats_text.delete("1.0", tk.END)

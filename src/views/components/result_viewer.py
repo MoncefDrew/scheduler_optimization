@@ -1,6 +1,4 @@
-"""
-Result viewer: renders the animated logs and Gantt chart for a scenario.
-"""
+
 from __future__ import annotations
 
 import base64
@@ -24,7 +22,7 @@ _MONO_TAG = "mono"
 
 
 def configure_log_tags(text_widget: tk.Text) -> None:
-    """Apply colour/font tags to a log Text widget."""
+
     text_widget.tag_configure(_HEADER_TAG, foreground="#2563eb", font=("TkDefaultFont", 12, "bold"))
     text_widget.tag_configure(_PHASE_TAG, foreground="#7c3aed", font=("TkDefaultFont", 12, "bold"))
     text_widget.tag_configure(_OK_TAG, foreground="#16a34a")
@@ -34,7 +32,7 @@ def configure_log_tags(text_widget: tk.Text) -> None:
 
 
 def _pick_tag(line: str) -> Optional[str]:
-    """Return the appropriate tag name for a log line, or None."""
+
     if line.startswith("SCENARIO ") or line.startswith("SCENARIO:"):
         return _HEADER_TAG
     if line.startswith("PHASE ") or line.startswith("Processing "):
@@ -51,7 +49,7 @@ def _pick_tag(line: str) -> Optional[str]:
 
 
 def render_logs_animated(app: "SchedulerGUI", text: str) -> None:
-    """Render log text into app.log_text with a gentle line-by-line animation."""
+
     if getattr(app, "_log_after_id", None) is not None:
         try:
             app.after_cancel(app._log_after_id)
@@ -89,7 +87,7 @@ def render_logs_animated(app: "SchedulerGUI", text: str) -> None:
 
 
 def render_diagram(app: "SchedulerGUI", scenario: "Scenario") -> None:
-    """Render the Gantt chart for *scenario* into the diagram frame."""
+
     fig = build_gantt_figure(
         scenario.schedule or [],
         title=f"{scenario.name} - Makespan={scenario.optimal_makespan}",

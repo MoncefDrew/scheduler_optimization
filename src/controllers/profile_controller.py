@@ -84,9 +84,7 @@ def update_profile_by_name(
     config: SchedulerConfig,
     scenarios: List[Dict[str, Any]],
 ) -> int:
-    """
-    Update an existing profile (matched by name), overwriting config + scenarios.
-    """
+
     init_db(db_path)
     con = sqlite3.connect(db_path)
     try:
@@ -159,15 +157,7 @@ def save_profile(
     config: SchedulerConfig,
     scenarios: List[Dict[str, Any]],
 ) -> int:
-    """
-    scenarios: list of dicts with keys:
-      - name (str)
-      - job_paths (Dict[int, List[int]])
-      - optimal_vector (Optional[List[int]])
-      - optimal_makespan (Optional[float])
-      - schedule (Optional[List[Tuple[int,int,float,float]]])
-      - logs (str)
-    """
+
     init_db(db_path)
     con = sqlite3.connect(db_path)
     try:

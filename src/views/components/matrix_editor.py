@@ -1,6 +1,4 @@
-"""
-Matrix editor dialogs: create a new blank matrix or edit the current one.
-"""
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -14,7 +12,7 @@ if TYPE_CHECKING:
 
 
 def open_new_matrix_dialog(app: "SchedulerGUI") -> None:
-    """Open a dialog to choose matrix dimensions, then open the value editor."""
+
     dialog = tk.Toplevel(app)
     dialog.title("Configure matrix dimensions")
 
@@ -41,7 +39,7 @@ def open_new_matrix_dialog(app: "SchedulerGUI") -> None:
 
 
 def open_edit_matrix_dialog(app: "SchedulerGUI") -> None:
-    """Edit the currently loaded matrix in-place."""
+
     if not app.matrix:
         messagebox.showinfo("No configuration", "Load or create a configuration first.")
         return
@@ -60,7 +58,7 @@ def _open_value_editor(
     *,
     prefill: bool = False,
 ) -> None:
-    """Generic editor that renders a grid of entries for the matrix + vectors."""
+
     editor = tk.Toplevel(app)
     editor.title("Edit matrix and vectors")
 

@@ -1,18 +1,17 @@
-"""
-Main application window for the Flexible Job Shop Scheduler GUI.
 
-This module is intentionally thin: it wires together the domain models, the
-scheduling core, and the reusable UI components that live in
-``src/views/components/``.
-"""
 from __future__ import annotations
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Optional
 
-from ..controllers.csv_controller import load_csv_file, parse_csv_text, save_csv_file
-from ..core.io_utils import SchedulerConfig, infer_dimensions_from_matrix
+from ..core.io_utils import (
+    SchedulerConfig,
+    infer_dimensions_from_matrix,
+    load_csv_file,
+    parse_csv_text,
+    save_csv_file,
+)
 from ..core.scheduler import ResourceScheduler
 
 from .components.models import Scenario
@@ -28,19 +27,12 @@ from .components.profile_dialogs import (
     open_save_current_profile_dialog,
     open_load_profile_dialog,
 )
+from .utils.config_helpers import apply_config, scenario_compatible, refresh_matrix_table
+from .utils.ui_helpers import on_scenario_double_click, insert_scenario_in_list, find_scenario_by_iid
 
 
 class SchedulerGUI(tk.Tk):
-    """
-    Root window for the Flexible Job Shop Scheduler.
 
-    State management
-    ----------------
-    The window owns the current ``matrix``, ``resource_times``,
-    ``availability_vector``, ``scheduler``, and ``scenarios`` list.
-    UI components receive a reference to *self* and call back into the methods
-    defined here (e.g. ``_apply_config``, ``_insert_scenario_in_list``).
-    """
 
     # ------------------------------------------------------------------
     # Initialisation
@@ -244,7 +236,7 @@ class SchedulerGUI(tk.Tk):
     # ------------------------------------------------------------------
 
     def load_from_csv(self):
-        """Prompt for a CSV file, open an inline editor, then apply the config."""
+
         path = filedialog.askopenfilename(
             title="Select CSV file",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
@@ -285,67 +277,24 @@ class SchedulerGUI(tk.Tk):
         )
 
     # ------------------------------------------------------------------
-    # Configuration helpers
+    # Configuration helpers  (delegate to views/utils/config_helpers.py)
     # ------------------------------------------------------------------
 
     def _apply_config(self, config: SchedulerConfig, *, rerun_scenarios: bool = True):
-        """Update internal state from a SchedulerConfig and refresh the UI."""
-        self.matrix = config.matrix
-        self.resource_times = config.resource_times
-        self.availability_vector = config.availability_vector
-        self.scheduler = ResourceScheduler(self.matrix, self.resource_times)
-
-        num_jobs, num_resources = infer_dimensions_from_matrix(self.matrix)
-        self.info_label.config(text=f"Jobs: {num_jobs}, Resources: {num_resources}")
-        self.resource_times_var.set(str(self.resource_times))
-        self.availability_var.set(str(self.availability_vector))
-        self._refresh_matrix_table()
-
-        if not rerun_scenarios:
-            return
-
-        for s in self.scenarios:
-            ok, reason = self._scenario_compatible(s, num_jobs, num_resources)
-            if not ok:
-                s.optimal_vector = None
-                s.optimal_makespan = None
-                s.schedule = None
-                s.logs = reason or "Scenario is not compatible with the current configuration."
-                self.scenario_list.item(str(id(s)), values=(s.name, "", ""))
-                continue
-            self._run_scenario_object(s, silent=True)
-            self.scenario_list.item(
-                str(id(s)),
-                values=(s.name, s.optimal_makespan or "", s.optimal_vector or ""),
-            )
+        apply_config(self, config, rerun_scenarios=rerun_scenarios)
 
     def _scenario_compatible(self, scenario: Scenario, num_jobs: int, num_resources: int):
-        """Return (True, '') or (False, reason_str) for a scenario vs current dims."""
-        for j in range(num_jobs):
-            if j not in scenario.job_paths:
-                return False, f"Scenario missing path for J{j + 1} under current configuration."
-            path = scenario.job_paths.get(j, [])
-            if any(r < 0 or r >= num_resources for r in path):
-                return False, f"Scenario has invalid resource index in job path for J{j + 1}."
-        return True, ""
+        return scenario_compatible(self, scenario, num_jobs, num_resources)
 
     def _refresh_matrix_table(self):
-        self.matrix_table.delete(*self.matrix_table.get_children())
-        num_jobs, num_resources = infer_dimensions_from_matrix(self.matrix)
-        cols = [f"R{j + 1}" for j in range(num_resources)]
-        self.matrix_table["columns"] = cols
-        for col in cols:
-            self.matrix_table.heading(col, text=col)
-            self.matrix_table.column(col, width=60, anchor="center")
-        for i in range(num_jobs):
-            self.matrix_table.insert("", "end", values=self.matrix[i])
+        refresh_matrix_table(self)
 
     # ------------------------------------------------------------------
     # Scenario execution
     # ------------------------------------------------------------------
 
     def _run_scenario_object(self, scenario: Scenario, *, silent: bool = False):
-        """Run optimisation for *scenario* and store results + logs."""
+
         if not self.scheduler:
             return
 
@@ -459,33 +408,17 @@ class SchedulerGUI(tk.Tk):
         self.scenario_list.delete(iid)
 
     # ------------------------------------------------------------------
-    # Utility helpers
+    # Utility helpers  (delegate to views/utils/ui_helpers.py)
     # ------------------------------------------------------------------
 
     def _on_scenario_double_click(self, event):
-        sel = self.scenario_list.selection()
-        if not sel:
-            return
-        scenario = self._find_scenario_by_iid(sel[0])
-        if not scenario:
-            return
-        if scenario.schedule is None:
-            self.run_selected_scenario()
-        self.show_result_for_selected()
+        on_scenario_double_click(self, event)
 
     def _insert_scenario_in_list(self, scenario: Scenario):
-        self.scenario_list.insert(
-            "",
-            "end",
-            iid=str(id(scenario)),
-            values=(scenario.name, scenario.optimal_makespan or "", scenario.optimal_vector or ""),
-        )
+        insert_scenario_in_list(self, scenario)
 
     def _find_scenario_by_iid(self, iid) -> Optional[Scenario]:
-        for s in self.scenarios:
-            if str(id(s)) == str(iid):
-                return s
-        return None
+        return find_scenario_by_iid(self, iid)
 
 
 def run_gui():

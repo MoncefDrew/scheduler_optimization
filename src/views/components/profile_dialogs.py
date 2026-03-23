@@ -1,6 +1,4 @@
-"""
-Profile save / load dialogs.
-"""
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -22,7 +20,7 @@ if TYPE_CHECKING:
 
 
 def open_save_profile_dialog(app: "SchedulerGUI") -> None:
-    """Prompt for a profile name and persist the current configuration + scenarios."""
+
     if not app.matrix or not app.resource_times or not app.availability_vector:
         messagebox.showerror(
             "Missing configuration",
@@ -54,7 +52,7 @@ def open_save_profile_dialog(app: "SchedulerGUI") -> None:
 
 
 def open_save_current_profile_dialog(app: "SchedulerGUI") -> None:
-    """Overwrite the currently loaded profile with the current state."""
+
     if not app.current_profile_name:
         messagebox.showinfo(
             "No current profile",
@@ -84,7 +82,7 @@ def open_save_current_profile_dialog(app: "SchedulerGUI") -> None:
 
 
 def open_load_profile_dialog(app: "SchedulerGUI") -> None:
-    """Show a list of saved profiles and load the selected one."""
+
     try:
         profiles = list_profiles(app.profile_db_path)
     except Exception as e:

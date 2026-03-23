@@ -1,6 +1,4 @@
-"""
-Scenario creation and editing dialogs.
-"""
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -16,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def open_create_scenarios_dialog(app: "SchedulerGUI") -> None:
-    """Dialog to create N new scenarios (random or custom paths)."""
+
     if not app.scheduler:
         messagebox.showwarning("No config", "Please configure matrix and vectors first.")
         return
@@ -71,7 +69,7 @@ def open_custom_path_editor(
     scenario_index: int,
     existing_scenario: Optional[Scenario] = None,
 ) -> None:
-    """Tree-based editor for defining per-job resource routing paths."""
+
     if not app.scheduler:
         return
     num_jobs, num_resources = infer_dimensions_from_matrix(app.matrix)
@@ -173,7 +171,7 @@ def open_custom_path_editor(
 
 
 def open_edit_scenario_dialog(app: "SchedulerGUI", scenario: Scenario) -> None:
-    """Open custom path editor pre-filled with an existing scenario's paths."""
+
     if not app.scheduler:
         messagebox.showwarning("No config", "Please configure matrix and vectors first.")
         return
